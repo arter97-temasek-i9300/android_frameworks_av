@@ -64,6 +64,9 @@ LOCAL_SRC_FILES:=                         \
         avc_utils.cpp                     \
         ExtendedExtractor.cpp             \
         ExtendedUtils.cpp                 \
+        ExtendedStats.cpp                 \
+        APE.cpp                           \
+        FFMPEGSoftCodec.cpp               \
 
 LOCAL_C_INCLUDES:= \
         $(TOP)/frameworks/av/include/media/ \
@@ -117,6 +120,10 @@ endif
 endif
 endif
 
+ifeq ($(TARGET_BOARD_PLATFORM),omap4)
+LOCAL_CFLAGS := -DBOARD_CANT_REALLOCATE_OMX_BUFFERS
+endif
+
 #QTI FLAC Decoder
 ifeq ($(call is-vendor-board-platform,QCOM),true)
 LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio
@@ -141,13 +148,13 @@ LOCAL_STATIC_LIBRARIES := \
         libmedia_helper
 
 ifeq ($(TARGET_USES_QCOM_BSP), true)
-    LOCAL_C_INCLUDES += $(call project-path-for,qcom-display)/$(TARGET_BOARD_PLATFORM)/libgralloc
+    LOCAL_C_INCLUDES += $(call project-path-for,qcom-display)/libgralloc
     LOCAL_CFLAGS += -DQCOM_BSP
 endif
 
 ifeq ($(TARGET_ENABLE_QC_AV_ENHANCEMENTS),true)
        LOCAL_CFLAGS     += -DENABLE_AV_ENHANCEMENTS
-       LOCAL_C_INCLUDES += $(TOP)/$(call project-path-for,qcom-media)/$(TARGET_BOARD_PLATFORM)/mm-core/inc
+       LOCAL_C_INCLUDES += $(TOP)/$(call project-path-for,qcom-media)/mm-core/inc
        LOCAL_C_INCLUDES += $(TOP)/frameworks/av/media/libstagefright/include
        LOCAL_SRC_FILES  += ExtendedMediaDefs.cpp
        LOCAL_SRC_FILES  += ExtendedWriter.cpp
@@ -157,7 +164,7 @@ endif #TARGET_ENABLE_AV_ENHANCEMENTS
 ifeq ($(call is-vendor-board-platform,QCOM),true)
 ifeq ($(strip $(AUDIO_FEATURE_ENABLED_PCM_OFFLOAD_24)),true)
        LOCAL_CFLAGS     += -DPCM_OFFLOAD_ENABLED_24
-       LOCAL_C_INCLUDES += $(TOP)/$(call project-path-for,qcom-media)/$(TARGET_BOARD_PLATFORM)/mm-core/inc
+       LOCAL_C_INCLUDES += $(TOP)/$(call project-path-for,qcom-media)/mm-core/inc
 endif
 endif
 

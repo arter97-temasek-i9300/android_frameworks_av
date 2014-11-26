@@ -4690,12 +4690,9 @@ void AudioFlinger::OffloadThread::onAddNewTrack_l()
 void AudioFlinger::OffloadThread::onFatalError()
 {
     Mutex::Autolock _l(mLock);
-    size_t size = mTracks.size();
-    for (size_t i = 0; i < size; i++) {
-        sp<Track> t = mTracks[i];
-        t->signalError();
-    }
-    invalidateTracks_l(AUDIO_STREAM_MUSIC);
+
+   // call invalidate, to recreate track on fatal error
+   invalidateTracks_l(AUDIO_STREAM_MUSIC);
 }
 
 // ----------------------------------------------------------------------------
@@ -4722,7 +4719,11 @@ void AudioFlinger::DuplicatingThread::threadLoop_mix()
     if (outputsReady(outputTracks)) {
         mAudioMixer->process(AudioBufferProvider::kInvalidPTS);
     } else {
-        memset(mSinkBuffer, 0, mSinkBufferSize);
+        if (mMixerBufferValid) {
+            memset(mMixerBuffer, 0, mMixerBufferSize);
+        } else {
+            memset(mSinkBuffer, 0, mSinkBufferSize);
+        }
     }
     sleepTime = 0;
     writeFrames = mNormalFrameCount;

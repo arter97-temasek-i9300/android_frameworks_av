@@ -1792,6 +1792,12 @@ status_t MPEG4Writer::Track::start(MetaData *params) {
 
     meta->setInt64(kKeyTime, startTimeUs);
 
+    if (params) {
+        RecorderExtendedStats* rStats = NULL;
+        params->findPointer(ExtendedStats::MEDIA_STATS_FLAG, (void**)&rStats);
+        meta->setPointer(ExtendedStats::MEDIA_STATS_FLAG, rStats);
+    }
+
     status_t err = mSource->start(meta.get());
     if (err != OK) {
         mDone = mReachedEOS = true;
@@ -2871,8 +2877,10 @@ void MPEG4Writer::Track::writeMp4aEsdsBox() {
 
     mOwner->writeInt16(0x03);  // XXX
     mOwner->writeInt8(0x00);   // buffer size 24-bit
-    mOwner->writeInt32(96000); // max bit rate
-    mOwner->writeInt32(96000); // avg bit rate
+    int32_t bitRate;
+    bool success = mMeta->findInt32(kKeyBitRate, &bitRate);
+    mOwner->writeInt32(success ? bitRate : 96000); // max bit rate
+    mOwner->writeInt32(success ? bitRate : 96000); // avg bit rate
 
     mOwner->writeInt8(0x05);   // DecoderSpecificInfoTag
     mOwner->writeInt8(mCodecSpecificDataSize);
