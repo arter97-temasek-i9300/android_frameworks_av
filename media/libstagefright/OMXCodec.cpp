@@ -277,7 +277,8 @@ void OMXCodec::findMatchingCodecs(
         return;
     }
 
-    if (matchComponentName && !strncmp("FLACDecoder", matchComponentName, 10)) {
+#ifdef QTI_FLAC_DECODER
+    if (matchComponentName && !strncmp("FLACDecoder", matchComponentName, strlen("FLACDecoder"))) {
             matchingCodecs->add();
 
             CodecNameAndQuirks *entry = &matchingCodecs->editItemAt(index);
@@ -285,6 +286,7 @@ void OMXCodec::findMatchingCodecs(
             entry->mQuirks = 0;
             return;
     }
+#endif
 #endif
 
     for (;;) {
@@ -408,10 +410,12 @@ sp<MediaSource> OMXCodec::Create(
 
     Vector<CodecNameAndQuirks> matchingCodecs;
 
-    if (!strncmp(mime, MEDIA_MIMETYPE_AUDIO_FLAC, 10)) {
+#ifdef QTI_FLAC_DECODER
+    if (!strncmp(mime, MEDIA_MIMETYPE_AUDIO_FLAC, strlen(MEDIA_MIMETYPE_AUDIO_FLAC))) {
         findMatchingCodecs(mime, createEncoder,
             "FLACDecoder", flags, &matchingCodecs);
     } else
+#endif
         findMatchingCodecs(
             mime, createEncoder, matchComponentName, flags, &matchingCodecs);
 
@@ -2267,7 +2271,12 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
     //    plus an extra buffer to account for incorrect minUndequeuedBufs
     CODEC_LOGI("OMX-buffers: min=%u actual=%u undeq=%d+1",
             def.nBufferCountMin, def.nBufferCountActual, minUndequeuedBufs);
-
+#ifdef BOARD_CANT_REALLOCATE_OMX_BUFFERS
+    // Some devices don't like to set OMX_IndexParamPortDefinition at this
+    // point (even with an unmodified def), so skip it if possible.
+    // This check was present in KitKat.
+    if (def.nBufferCountActual < def.nBufferCountMin + minUndequeuedBufs) {
+#endif
     for (OMX_U32 extraBuffers = 2 + 1; /* condition inside loop */; extraBuffers--) {
         OMX_U32 newBufferCount =
             def.nBufferCountMin + minUndequeuedBufs + extraBuffers;
@@ -2289,6 +2298,9 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
     }
     CODEC_LOGI("OMX-buffers: min=%u actual=%u undeq=%d+1",
             def.nBufferCountMin, def.nBufferCountActual, minUndequeuedBufs);
+#ifdef BOARD_CANT_REALLOCATE_OMX_BUFFERS
+    }
+#endif
 
     err = native_window_set_buffer_count(
             mNativeWindow.get(), def.nBufferCountActual);
