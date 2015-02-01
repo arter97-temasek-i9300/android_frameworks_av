@@ -51,6 +51,7 @@ NuPlayer::GenericSource::GenericSource(
       mFetchSubtitleDataGeneration(0),
       mFetchTimedTextDataGeneration(0),
       mDurationUs(0ll),
+      mCachedDurationUs(0ll),
       mAudioIsVorbis(false),
       mIsWidevine(false),
       mUIDValid(uidValid),
@@ -80,6 +81,7 @@ void NuPlayer::GenericSource::resetDataSource() {
     mDrmManagerClient = NULL;
     mStarted = false;
     mStopRead = true;
+    mInitialSeekTime = -1;
 }
 
 status_t NuPlayer::GenericSource::setDataSource(
@@ -529,6 +531,11 @@ void NuPlayer::GenericSource::start() {
     }
 
     setDrmPlaybackStatusIfNeeded(Playback::START, getLastReadPosition() / 1000);
+
+    if (mInitialSeekTime > 0) {
+        doSeek(mInitialSeekTime);
+    }
+
     mStarted = true;
 }
 
@@ -598,9 +605,13 @@ void NuPlayer::GenericSource::notifyBufferingUpdate(int percentage,
     msg->post();
 }
 
-void NuPlayer::GenericSource::onPollBuffering() {
+status_t NuPlayer::GenericSource::getCachedDuration(int64_t *cachedDurationUs) {
     status_t finalStatus = UNKNOWN_ERROR;
-    int64_t cachedDurationUs = 0ll;
+
+    if (mDurationUs > 0) {
+        *cachedDurationUs = mDurationUs;
+        return OK;
+    }
 
     if (mCachedSource != NULL) {
         size_t cachedDataRemaining =
@@ -615,13 +626,27 @@ void NuPlayer::GenericSource::onPollBuffering() {
                 bitrate = mBitrate;
             }
             if (bitrate > 0) {
-                cachedDurationUs = cachedDataRemaining * 8000000ll / bitrate;
+                *cachedDurationUs = cachedDataRemaining * 8000000ll / bitrate;
             }
         }
     } else if (mWVMExtractor != NULL) {
-        cachedDurationUs
+        *cachedDurationUs
             = mWVMExtractor->getCachedDurationUs(&finalStatus);
     }
+
+    if (*cachedDurationUs > 0) {
+        mCachedDurationUs = *cachedDurationUs;
+    } else {
+        *cachedDurationUs = mCachedDurationUs;
+    }
+
+    ALOGV("getCachedDuration = %lld", *cachedDurationUs);
+    return finalStatus;
+}
+
+void NuPlayer::GenericSource::onPollBuffering() {
+    int64_t cachedDurationUs = 0ll;
+    status_t finalStatus = getCachedDuration(&cachedDurationUs);
 
     if (finalStatus == ERROR_END_OF_STREAM) {
         notifyBufferingUpdate(100, 0);
@@ -1186,7 +1211,12 @@ status_t NuPlayer::GenericSource::doSeek(int64_t seekTimeUs) {
     // If the Widevine source is stopped, do not attempt to read any
     // more buffers.
     if (mStopRead) {
-        return INVALID_OPERATION;
+        if (mIsWidevine) {
+            return INVALID_OPERATION;
+        } else if (mInitialSeekTime == -1) {
+            mInitialSeekTime = seekTimeUs;
+            return OK;
+        }
     }
     if (mVideoTrack.mSource != NULL) {
         int64_t actualTimeUs;
@@ -1390,6 +1420,10 @@ void NuPlayer::GenericSource::readBuffer(
             formatChange = false;
             seeking = false;
             ++numBuffers;
+
+            if (trackType == MEDIA_TRACK_TYPE_VIDEO) {
+                actualTimeUs = NULL;
+            }
         } else if (err == WOULD_BLOCK) {
             break;
         } else if (err == INFO_FORMAT_CHANGED) {
